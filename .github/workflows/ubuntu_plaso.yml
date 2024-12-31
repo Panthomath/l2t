@@ -62,7 +62,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # Step 2: Install Python and Dependencies
+      # Step 2: Install Dependencies
       - name: Install Plaso Tools and Python Dependencies
         run: |
           sudo apt update
@@ -91,60 +91,11 @@ jobs:
             -w "./inv-${{ matrix.folder }}.json" \
             -o json_line
 
-      # Step 5: Send JSON output to Splunk
+      # Step 5: Send JSON output to Splunk using send_to_splunk.py
       - name: Send to Splunk
-        env:
-          SPLUNK_URL: 'https://http-inputs-remitly.splunkcloud.com/services/collector/event'
-          SPLUNK_TOKEN: 'b8eb4e10-6ea8-4c26-a296-0dfd96c401c7'
         run: |
           echo "Sending inv-${{ matrix.folder }}.json to Splunk"
-          python3 - <<EOF
-import json
-import requests
-
-def send_to_splunk_event(json_file_path, splunk_url, splunk_token):
-    try:
-        # Read the JSON file
-        with open(json_file_path, 'r') as file:
-            json_str = file.read()
-
-        # Parse the JSON event
-        data = json.loads(json_str)
-
-        # Wrap the JSON object inside 'event'
-        payload = {"event": data}
-
-        # Convert the payload to string
-        payload_str = json.dumps(payload)
-
-        # Set headers for the HTTP request
-        headers = {
-            'Authorization': f'Splunk {splunk_token}',
-            'Content-Type': 'application/json'
-        }
-
-        # Send the data to Splunk
-        response = requests.post(splunk_url, headers=headers, data=payload_str)
-
-        # Check the response from Splunk
-        if response.status_code != 200:
-            print(f"Failed to send data to Splunk. Status code: {response.status_code}")
-            print(response.text)
-        else:
-            print("Successfully sent data to Splunk.")
-
-    except json.JSONDecodeError as e:
-        print(f"Error decoding JSON: {e}")
-    except Exception as e:
-        print(f"Error: {e}")
-
-# Call the function with environment variables and JSON file path
-send_to_splunk_event(
-    json_file_path=f"./inv-${{ matrix.folder }}.json",
-    splunk_url="${{ env.SPLUNK_URL }}",
-    splunk_token="${{ env.SPLUNK_TOKEN }}"
-)
-EOF
+          python3 send_to_splunk.py "./inv-${{ matrix.folder }}.json"
 
       # Step 6: Upload the JSON file as an artifact (for backup)
       - name: Upload JSON Output
