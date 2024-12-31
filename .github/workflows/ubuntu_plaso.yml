@@ -12,9 +12,11 @@ jobs:
       folders: ${{ steps.get-new-folders.outputs.folders }}
 
     steps:
-      # Step 1: Checkout the repository
+      # Step 1: Checkout the repository with full history
       - name: Checkout Repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch the full history to ensure HEAD^ is available
 
       # Step 2: Identify new folders
       - name: Identify New Folders
