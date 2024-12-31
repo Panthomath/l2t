@@ -1,0 +1,26 @@
+Created by UAC (Unix-like Artifacts Collector) 3.0.0
+
+[Case Information]
+Case Number: 
+Evidence Number: 
+Description: 
+Examiner: 
+Notes: 
+
+[System Information]
+Operating System: macos
+System Architecture: arm64
+Hostname: Karans-MacBook-Pro.local
+
+[Acquisition Information]
+Mount Point: /
+Acquisition Started: Mon Dec 30 15:54:36 2024 -0800
+Acquisition Finished: Mon Dec 30 15:54:47 2024 -0800
+
+[Output Information]
+File: remitlydartuac.tar.gz
+Format: tar
+
+[Computed Hashes]
+MD5 checksum: 1f15496f3b65e2617b365d9c514b2fcf
+SHA1 checksum: ab0e9b6af52c0bd6585c509135517b8474eb8a03
