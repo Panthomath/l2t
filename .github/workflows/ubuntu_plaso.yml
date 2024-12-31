@@ -33,11 +33,20 @@ jobs:
           if [ -z "$NEW_FOLDERS" ]; then
             echo "[]" > folders.json
           else
-            echo $NEW_FOLDERS | jq -R -s 'split("\n") | map(select(. != ""))' > folders.json
+            echo "$NEW_FOLDERS" | jq -R -s 'split("\n") | map(select(. != ""))' > folders.json
           fi
+
+          # Debugging: Output the folders.json content
+          echo "Folders JSON:"
+          cat folders.json
 
           # Set the output variable
           echo "::set-output name=folders::$(cat folders.json)"
+
+      # Debugging step to log outputs
+      - name: Debug Outputs
+        run: |
+          echo "Folders output: ${{ steps.get-new-folders.outputs.folders }}"
 
   process-folder:
     needs: detect-new-folders
