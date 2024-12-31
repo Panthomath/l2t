@@ -1,10 +1,9 @@
-name: Run Plaso Analysis
+name: Run Plaso Analysis on New Folders
 
 on:
-  workflow_dispatch: # Trigger the workflow manually
-  push: # Trigger the workflow on push to the repository
-    branches:
-      - main
+  schedule:
+    - cron: "*/5 * * * *" # Run every 5 minutes
+  workflow_dispatch: # Allow manual trigger
 
 jobs:
   run-plaso:
@@ -15,24 +14,62 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # Step 2: Update the system and install dependencies
+      # Step 2: Set up environment and install dependencies
       - name: Install Plaso Tools
         run: |
           sudo apt update
           sudo apt install -y plaso-tools python3-plaso
 
-      # Step 3: Run log2timeline.py
-      - name: Run Plaso Analysis
+      # Step 3: Identify new folders and process them
+      - name: Run Plaso Analysis on New Folders
+        id: process-new-folders
         run: |
-          # Path to the cloned repository folder
-          echo "Contents of uac folder:"
-          ls -l ./uac
-          
-          log2timeline.py output.plaso ./uac
+          # File to track processed folders
+          PROCESSED_FOLDERS_FILE=".processed_folders"
 
-      # Step 4: Save the output file as an artifact
-      - name: Upload Plaso Output
+          # List current folders in the uac directory
+          CURRENT_FOLDERS=$(find ./uac -mindepth 1 -maxdepth 1 -type d -exec basename {} \;)
+
+          echo "Current folders:"
+          echo "${CURRENT_FOLDERS}"
+
+          # Check if the processed folders file exists
+          if [ -f "$PROCESSED_FOLDERS_FILE" ]; then
+            # Read previously processed folders
+            PROCESSED_FOLDERS=$(cat "$PROCESSED_FOLDERS_FILE")
+            echo "Previously processed folders:"
+            echo "${PROCESSED_FOLDERS}"
+          else
+            # Initialize an empty processed folders file
+            PROCESSED_FOLDERS=""
+            touch "$PROCESSED_FOLDERS_FILE"
+          fi
+
+          # Find new folders by comparing current and processed folders
+          NEW_FOLDERS=$(comm -23 <(echo "$CURRENT_FOLDERS" | sort) <(echo "$PROCESSED_FOLDERS" | sort))
+
+          echo "New folders to process:"
+          echo "${NEW_FOLDERS}"
+
+          # If there are no new folders, exit
+          if [ -z "$NEW_FOLDERS" ]; then
+            echo "No new folders to process."
+            exit 0
+          fi
+
+          # Run Plaso on each new folder
+          for folder in $NEW_FOLDERS; do
+            echo "Processing folder: ./uac/$folder"
+            log2timeline.py output_${folder}.plaso ./uac/$folder
+          done
+
+          # Update the processed folders file
+          echo "$CURRENT_FOLDERS" > "$PROCESSED_FOLDERS_FILE"
+
+      # Step 4: Upload output files as artifacts
+      - name: Upload Plaso Outputs
+        if: steps.process-new-folders.outcome == 'success'
         uses: actions/upload-artifact@v3
         with:
-          name: plaso-output
-          path: output.plaso
+          name: plaso-outputs
+          path: output_*.plaso
