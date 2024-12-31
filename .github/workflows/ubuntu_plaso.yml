@@ -23,17 +23,22 @@ jobs:
           # Fetch changes and get list of added folders
           git fetch origin
           FOLDER_PATH="uac"
-          NEW_FOLDERS=$(git diff --name-status HEAD^ | grep "^A" | grep "^A\s${FOLDER_PATH}" | awk '{print $2}' | awk -F/ '{print $2}' | sort | uniq)
+          NEW_FOLDERS=$(git diff --name-status HEAD^ HEAD | grep "^A" | grep "^A\s${FOLDER_PATH}" | awk '{print $2}' | awk -F/ '{print $2}' | sort | uniq)
 
           echo "Newly detected folders:"
           echo "$NEW_FOLDERS"
 
-          # Convert folder list to a comma-separated string
-          FOLDERS=$(echo $NEW_FOLDERS | tr '\n' ',')
-          echo "::set-output name=folders::$FOLDERS"
+          # Convert folder list to a JSON array (or an empty array if no folders are found)
+          if [ -z "$NEW_FOLDERS" ]; then
+            echo "::set-output name=folders::[]"
+          else
+            FOLDERS_JSON=$(echo $NEW_FOLDERS | jq -R -s 'split("\n") | map(select(. != ""))')
+            echo "::set-output name=folders::$FOLDERS_JSON"
+          fi
 
   process-folder:
     needs: detect-new-folders
+    if: needs.detect-new-folders.outputs.folders != '[]' # Skip job if no folders are detected
     runs-on: ubuntu-22.04
     strategy:
       matrix:
