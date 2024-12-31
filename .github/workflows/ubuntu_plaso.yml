@@ -1,75 +1,64 @@
-name: Run Plaso Analysis on New Folders
+name: Process Evidence Folders with Plaso (psteal)
 
 on:
-  schedule:
-    - cron: "* * * * *" # Run every 5 minutes
-  workflow_dispatch: # Allow manual trigger
+  push:
+    paths:
+      - 'uac/**' # Monitor changes in the uac directory
 
 jobs:
-  run-plaso:
-    runs-on: ubuntu-22.04 # Use Ubuntu 22.04 as the runner OS
+  detect-new-folders:
+    runs-on: ubuntu-22.04
+    outputs:
+      folders: ${{ steps.get-new-folders.outputs.folders }}
 
     steps:
       # Step 1: Checkout the repository
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # Step 2: Set up environment and install dependencies
+      # Step 2: Identify new folders
+      - name: Identify New Folders
+        id: get-new-folders
+        run: |
+          # Fetch changes and get list of added folders
+          git fetch origin
+          FOLDER_PATH="uac"
+          NEW_FOLDERS=$(git diff --name-status HEAD^ | grep "^A" | grep "^A\s${FOLDER_PATH}" | awk '{print $2}' | awk -F/ '{print $2}' | sort | uniq)
+
+          echo "Newly detected folders:"
+          echo "$NEW_FOLDERS"
+
+          # Convert folder list to a comma-separated string
+          FOLDERS=$(echo $NEW_FOLDERS | tr '\n' ',')
+          echo "::set-output name=folders::$FOLDERS"
+
+  process-folder:
+    needs: detect-new-folders
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        folder: ${{ fromJson(needs.detect-new-folders.outputs.folders) }} # Each job processes one folder
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      # Step 2: Install Plaso Tools
       - name: Install Plaso Tools
         run: |
           sudo apt update
           sudo apt install -y python3-plaso
 
-      # Step 3: Identify new folders and process them
-      - name: Run Plaso Analysis on New Folders
-        id: process-new-folders
+      # Step 3: Run psteal.py on the assigned folder
+      - name: Process Evidence with psteal
         run: |
-          # File to track processed folders
-          PROCESSED_FOLDERS_FILE=".processed_folders"
+          echo "Processing folder: ./uac/${{ matrix.folder }}"
+          psteal.py --source ./uac/${{ matrix.folder }}/ -w ./inv-${{ matrix.folder }}.json -o json_line
 
-          # List current folders in the uac directory
-          CURRENT_FOLDERS=$(find ./uac -mindepth 1 -maxdepth 1 -type d -exec basename {} \;)
-
-          echo "Current folders:"
-          echo "${CURRENT_FOLDERS}"
-
-          # Check if the processed folders file exists
-          if [ -f "$PROCESSED_FOLDERS_FILE" ]; then
-            # Read previously processed folders
-            PROCESSED_FOLDERS=$(cat "$PROCESSED_FOLDERS_FILE")
-            echo "Previously processed folders:"
-            echo "${PROCESSED_FOLDERS}"
-          else
-            # Initialize an empty processed folders file
-            PROCESSED_FOLDERS=""
-            touch "$PROCESSED_FOLDERS_FILE"
-          fi
-
-          # Find new folders by comparing current and processed folders
-          NEW_FOLDERS=$(comm -23 <(echo "$CURRENT_FOLDERS" | sort) <(echo "$PROCESSED_FOLDERS" | sort))
-
-          echo "New folders to process:"
-          echo "${NEW_FOLDERS}"
-
-          # If there are no new folders, exit
-          if [ -z "$NEW_FOLDERS" ]; then
-            echo "No new folders to process."
-            exit 0
-          fi
-
-          # Run Plaso on each new folder
-          for folder in $NEW_FOLDERS; do
-            echo "Processing folder: ./uac/$folder"
-            log2timeline.py output_${folder}.plaso ./uac/$folder
-          done
-
-          # Update the processed folders file
-          echo "$CURRENT_FOLDERS" > "$PROCESSED_FOLDERS_FILE"
-
-      # Step 4: Upload output files as artifacts
-      - name: Upload Plaso Outputs
-        if: steps.process-new-folders.outcome == 'success'
+      # Step 4: Upload the output file as an artifact
+      - name: Upload psteal Output
         uses: actions/upload-artifact@v3
         with:
-          name: plaso-outputs
-          path: output_*.plaso
+          name: inv-${{ matrix.folder }}
+          path: inv-${{ matrix.folder }}.json
