@@ -18,7 +18,7 @@ jobs:
       - name: Install Plaso Tools
         run: |
           sudo apt update
-          sudo apt install -y plaso-tools python3-plaso
+          sudo apt install -y python3-plaso
 
       # Step 3: Identify new folders and process them
       - name: Run Plaso Analysis on New Folders
