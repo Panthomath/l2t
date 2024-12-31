@@ -55,13 +55,27 @@ jobs:
           sudo apt update
           sudo apt install -y python3-plaso
 
-      # Step 3: Run psteal.py on the assigned folder
+      # Step 3: Extract tar.gz files if present
+      - name: Extract tar.gz Files
+        run: |
+          echo "Checking for tar.gz files in ./uac/${{ matrix.folder }}"
+          if ls ./uac/${{ matrix.folder }}/*.tar.gz 1> /dev/null 2>&1; then
+            echo "Found tar.gz files. Extracting..."
+            for archive in ./uac/${{ matrix.folder }}/*.tar.gz; do
+              echo "Extracting $archive"
+              tar -xzf "$archive" -C ./uac/${{ matrix.folder }}
+            done
+          else
+            echo "No tar.gz files found in ./uac/${{ matrix.folder }}"
+          fi
+
+      # Step 4: Run psteal.py on the assigned folder
       - name: Process Evidence with psteal
         run: |
           echo "Processing folder: ./uac/${{ matrix.folder }}"
           psteal.py --source ./uac/${{ matrix.folder }}/ -w ./inv-${{ matrix.folder }}.json -o json_line
 
-      # Step 4: Upload the output file as an artifact
+      # Step 5: Upload the output file as an artifact
       - name: Upload psteal Output
         uses: actions/upload-artifact@v3
         with:
