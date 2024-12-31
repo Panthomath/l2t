@@ -8,88 +8,103 @@ on:
 jobs:
   detect-new-folders:
     runs-on: ubuntu-22.04
+
+    # Declare an output "folders" at the job level
     outputs:
-      folders: ${{ steps.get-new-folders.outputs.folders }}
+      folders: ${{ steps.detect.outputs.folders }}
 
     steps:
       # Step 1: Checkout the repository with full history
       - name: Checkout Repository
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0 # Fetch the full history to ensure HEAD^ is available
+          fetch-depth: 0  # Fetch full git history so HEAD^ is available
 
       # Step 2: Identify new folders
       - name: Identify New Folders
-        id: get-new-folders
+        id: detect
         run: |
-          git fetch origin
-          FOLDER_PATH="uac"
-          NEW_FOLDERS=$(git diff --name-status HEAD^ HEAD | grep "^A" | grep "^A\s${FOLDER_PATH}" | awk '{print $2}' | awk -F/ '{print $2}' | sort | uniq)
+          # We'll compare the current commit (HEAD) with its parent (HEAD^).
+          # If the repository has only 1 commit or no HEAD^, this could still fail.
+          # But fetch-depth: 0 usually solves that.
+
+          # Identify newly *added* items in the 'uac/' directory and extract just the immediate folder name.
+          NEW_FOLDERS=$(git diff --name-status HEAD^ HEAD \
+            | grep "^A" \
+            | grep "^A\suac/" \
+            | awk '{print $2}' \
+            | awk -F/ '{print $2}' \
+            | sort -u)
 
           echo "Newly detected folders:"
           echo "$NEW_FOLDERS"
 
-          # Convert folder list to a JSON array (or an empty array if no folders are found)
+          # We'll store the final JSON array in a variable called FOLDERS_JSON.
           if [ -z "$NEW_FOLDERS" ]; then
-            echo "[]" > folders.json
+            # No new folders => an empty JSON array
+            FOLDERS_JSON="[]"
           else
-            echo "$NEW_FOLDERS" | jq -R -s 'split("\n") | map(select(. != ""))' > folders.json
+            # Turn the list of folders (one per line/space) into a proper JSON array.
+            #  1) echo the folders
+            #  2) split on newline
+            #  3) remove any empty entries
+            FOLDERS_JSON=$(echo "$NEW_FOLDERS" | jq -R -s 'split("\n") | map(select(. != ""))')
           fi
 
-          # Debugging: Output the folders.json content
-          echo "Folders JSON:"
-          cat folders.json
+          echo "FOLDERS_JSON=$FOLDERS_JSON"
 
-          # Set the output variable
-          echo "::set-output name=folders::$(cat folders.json)"
-
-      # Debugging step to log outputs
-      - name: Debug Outputs
-        run: |
-          echo "Folders output: ${{ steps.get-new-folders.outputs.folders }}"
+          # Now write it as an output using GITHUB_OUTPUT
+          echo "folders=$FOLDERS_JSON" >> "$GITHUB_OUTPUT"
 
   process-folder:
     needs: detect-new-folders
-    if: needs.detect-new-folders.outputs.folders != '[]' # Skip job if no folders are detected
+
+    # If there are no new folders (i.e. `[]`), skip this job entirely.
+    if: needs.detect-new-folders.outputs.folders != '[]'
+
     runs-on: ubuntu-22.04
+
     strategy:
       matrix:
-        folder: ${{ fromJson(needs.detect-new-folders.outputs.folders) }} # Each job processes one folder
+        folder: ${{ fromJson(needs.detect-new-folders.outputs.folders) }}
+        # Each folder in the JSON array becomes one job in the matrix.
 
     steps:
-      # Step 1: Checkout the repository
+      # Step 1: Checkout again so we have the code/folders
       - name: Checkout Repository
         uses: actions/checkout@v3
 
       # Step 2: Install Plaso Tools
       - name: Install Plaso Tools
         run: |
-          sudo apt update
-          sudo apt install -y python3-plaso
+          sudo apt-get update
+          sudo apt-get install -y python3-plaso
 
-      # Step 3: Extract tar.gz files if present
+      # Step 3: Extract tar.gz files (if present)
       - name: Extract tar.gz Files
         run: |
-          echo "Checking for tar.gz files in ./uac/${{ matrix.folder }}"
+          echo "Looking for tar.gz files in ./uac/${{ matrix.folder }}"
           if ls ./uac/${{ matrix.folder }}/*.tar.gz 1> /dev/null 2>&1; then
-            echo "Found tar.gz files. Extracting..."
             for archive in ./uac/${{ matrix.folder }}/*.tar.gz; do
               echo "Extracting $archive"
-              tar -xzf "$archive" -C ./uac/${{ matrix.folder }}
+              tar -xzf "$archive" -C "./uac/${{ matrix.folder }}"
             done
           else
-            echo "No tar.gz files found in ./uac/${{ matrix.folder }}"
+            echo "No tar.gz found in ./uac/${{ matrix.folder }}"
           fi
 
       # Step 4: Run psteal.py on the assigned folder
       - name: Process Evidence with psteal
         run: |
           echo "Processing folder: ./uac/${{ matrix.folder }}"
-          psteal.py --source ./uac/${{ matrix.folder }}/ -w ./inv-${{ matrix.folder }}.json -o json_line
+          psteal.py \
+            --source "./uac/${{ matrix.folder }}/" \
+            -w "./inv-${{ matrix.folder }}.json" \
+            -o json_line
 
       # Step 5: Upload the output file as an artifact
       - name: Upload psteal Output
         uses: actions/upload-artifact@v3
         with:
-          name: inv-${{ matrix.folder }}
-          path: inv-${{ matrix.folder }}.json
+          name: "inv-${{ matrix.folder }}"
+          path: "./inv-${{ matrix.folder }}.json"
