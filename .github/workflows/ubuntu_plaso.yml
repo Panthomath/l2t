@@ -1,0 +1,38 @@
+name: Run Plaso Analysis
+
+on:
+  workflow_dispatch: # Trigger the workflow manually
+  push: # Trigger the workflow on push to the repository
+    branches:
+      - main
+
+jobs:
+  run-plaso:
+    runs-on: ubuntu-22.04 # Use Ubuntu 22.04 as the runner OS
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      # Step 2: Update the system and install dependencies
+      - name: Install Plaso Tools
+        run: |
+          sudo apt update
+          sudo apt install -y plaso-tools python3-plaso
+
+      # Step 3: Run log2timeline.py
+      - name: Run Plaso Analysis
+        run: |
+          # Path to the cloned repository folder
+          echo "Contents of uac folder:"
+          ls -l ./uac
+          
+          log2timeline.py output.plaso ./uac
+
+      # Step 4: Save the output file as an artifact
+      - name: Upload Plaso Output
+        uses: actions/upload-artifact@v3
+        with:
+          name: plaso-output
+          path: output.plaso
