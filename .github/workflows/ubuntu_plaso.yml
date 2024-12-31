@@ -22,7 +22,6 @@ jobs:
       - name: Identify New Folders
         id: get-new-folders
         run: |
-          # Fetch changes and get list of added folders
           git fetch origin
           FOLDER_PATH="uac"
           NEW_FOLDERS=$(git diff --name-status HEAD^ HEAD | grep "^A" | grep "^A\s${FOLDER_PATH}" | awk '{print $2}' | awk -F/ '{print $2}' | sort | uniq)
@@ -32,11 +31,13 @@ jobs:
 
           # Convert folder list to a JSON array (or an empty array if no folders are found)
           if [ -z "$NEW_FOLDERS" ]; then
-            echo "::set-output name=folders::[]"
+            echo "[]" > folders.json
           else
-            FOLDERS_JSON=$(echo $NEW_FOLDERS | jq -R -s 'split("\n") | map(select(. != ""))')
-            echo "::set-output name=folders::$FOLDERS_JSON"
+            echo $NEW_FOLDERS | jq -R -s 'split("\n") | map(select(. != ""))' > folders.json
           fi
+
+          # Set the output variable
+          echo "::set-output name=folders::$(cat folders.json)"
 
   process-folder:
     needs: detect-new-folders
