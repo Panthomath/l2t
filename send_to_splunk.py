@@ -5,8 +5,6 @@ import requests
 import sys
 
 # Splunk HEC credentials (hardcoded)
-SPLUNK_URL = 'https://http-inputs-remitly.splunkcloud.com/services/collector/event'
-SPLUNK_TOKEN = 'b8eb4e10-6ea8-4c26-a296-0dfd96c401c7'
 
 def send_to_splunk_event(json_file_path):
     try:
